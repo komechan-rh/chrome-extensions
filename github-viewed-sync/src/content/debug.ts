@@ -1,10 +1,9 @@
 /**
  * デバッグログ。既定では無効で、通常利用時に console を汚さない。
  *
- * 有効化（GitHub のページで DevTools のコンソールから実行）:
- *   localStorage.setItem('github-viewed-sync:debug', '1')
- * 無効化:
- *   localStorage.removeItem('github-viewed-sync:debug')
+ * 有効化 / 無効化は DevTools の Application → Local Storage（`https://github.com`）で
+ * `github-viewed-sync:debug` に `1` を設定 / 行を削除する。
+ * コンソールへのコード貼り付けは Chrome にブロックされるため、手順は README を参照。
  */
 
 /** ビルド時に固定で有効化したい場合はここを true にする。 */

@@ -60,12 +60,17 @@ pnpm test:watch  # Vitest watch
 
 ### デバッグログ
 
-通常時はコンソールへ何も出しません。調査したいときだけ GitHub のページの DevTools コンソールで有効化します。
+通常時はコンソールへ何も出しません。調査したいときだけ、github.com オリジンの `localStorage` にフラグを追加して有効化します。
 
-```js
-localStorage.setItem('github-viewed-sync:debug', '1'); // 有効化（ページ再読み込み不要）
-localStorage.removeItem('github-viewed-sync:debug'); // 無効化
-```
+DevTools のコンソールへコードを貼り付ける方法は Chrome にブロックされる（`allow pasting` の入力を求められる）ため、**DevTools から直接キーを追加**するのが確実です。
+
+1. GitHub の PR 画面で DevTools を開く
+2. **Application** タブ → 左メニューの **Storage** → **Local Storage** → `https://github.com` を選ぶ
+3. 一覧の末尾にある空行をダブルクリックし、Key に `github-viewed-sync:debug`、Value に `1` を入力する
+
+無効化するときは、同じ画面でその行を選んで削除します。
+
+フラグは毎回のログ出力時に読まれるため、同期ログ（`sync {...}`）はリロードせずに出ます。一方で**診断レポートは起動 1.5 秒後に 1 回だけ出力する**ため、レポートを見たい場合はページをリロードしてください。
 
 ビルド時に固定で有効化したい場合は `src/content/debug.ts` の `const DEBUG = false;` を `true` にします。
 
