@@ -93,6 +93,9 @@ export function createNavigationWatcher(
       if (target.isRunning()) {
         debugLog('leaving target page', { reason, href });
         target.stop();
+      } else if (urlChanged) {
+        // URL 判定で弾かれていることが分かるようにする（GitHub の URL 変更に気付くため）。
+        debugLog('not a target page', { reason, pathname: win.location.pathname });
       }
       return;
     }

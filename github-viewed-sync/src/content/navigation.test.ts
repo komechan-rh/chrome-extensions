@@ -37,6 +37,9 @@ describe('isPrFilesPathname', () => {
   it('PR の Files changed 画面だけに一致する', () => {
     expect(isPrFilesPathname('/octocat/hello-world/pull/42/files')).toBe(true);
     expect(isPrFilesPathname('/octocat/hello-world/pull/42/files/abc123')).toBe(true);
+    // 新しいレビュー UI は /changes を使う。
+    expect(isPrFilesPathname('/octocat/hello-world/pull/42/changes')).toBe(true);
+    expect(isPrFilesPathname('/octocat/hello-world/pull/7/changes')).toBe(true);
     expect(isPrFilesPathname('/octocat/hello-world/pull/42')).toBe(false);
     expect(isPrFilesPathname('/octocat/hello-world/pull/42/commits')).toBe(false);
     expect(isPrFilesPathname('/octocat/hello-world/issues/42')).toBe(false);

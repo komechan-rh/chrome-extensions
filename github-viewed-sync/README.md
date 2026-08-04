@@ -18,10 +18,11 @@ GitHub の Pull Request「Files changed」画面で `Viewed` にしたファイ�
 
 ## 対応 URL
 
-同期が動作するのは PR の Files changed 画面のみです。
+同期が動作するのは PR の Files changed 画面のみです。従来 UI と新レビュー UI の両方に対応します。
 
 ```text
-https://github.com/*/*/pull/*/files
+https://github.com/*/*/pull/*/files      # 従来 UI
+https://github.com/*/*/pull/*/changes    # 新レビュー UI
 ```
 
 content script 自体は `https://github.com/*` に注入されます。これは GitHub が SPA（Turbo）遷移するため、Conversation タブから Files changed タブへ移動しただけでは Chrome が content script を再注入しないためです。注入後、URL が上記パターンに一致するときだけ同期を開始し、離れると監視を解除して付与した表示も取り除きます。
@@ -164,30 +165,43 @@ github-viewed-sync/
 
 | 用途 | 定数 | 依存している主な属性 |
 | --- | --- | --- |
-| diff 一覧のルート | `DIFF_CONTAINER_SELECTORS` | `[data-testid="diff-view"]` / `#files` |
+| diff 一覧のルート | `DIFF_CONTAINER_SELECTORS` | `[data-testid="diff-view"]` / `#files` / `main` |
 | diff の 1 ファイル | `DIFF_FILE_SELECTORS` | `[data-tagsearch-path]` / `[data-file-path]` |
-| ファイルパス | `DIFF_FILE_PATH_ATTRIBUTES`, `DIFF_FILE_PATH_TEXT_SELECTORS` | `data-tagsearch-path` / `.file-info a[title]` |
-| Viewed チェックボックス | `VIEWED_CONTROL_SELECTORS`, `VIEWED_LABEL_TEXT`, `VIEWED_FILE_ATTRIBUTE` | `input[name="viewed"]` / `.js-reviewed-checkbox` / ラベル文字列 `Viewed` |
-| ファイルツリーのルート | `TREE_CONTAINER_SELECTORS` | `[data-testid="file-tree"]` / `#repos-file-tree` / `[role="tree"]` |
+| ファイルパス | `DIFF_FILE_PATH_ATTRIBUTES`, `DIFF_FILE_PATH_TEXT_SELECTORS`, `DIFF_FILE_PATH_DEEP_SOURCES`, `DIFF_FILE_PATH_LABEL_PATTERN` | `data-tagsearch-path` / `data-file-path` / `data-clipboard-text` / `title` / `aria-label` |
+| Viewed トグル | `VIEWED_CONTROL_SELECTORS`, `VIEWED_CONTROL_HOST_SELECTOR`, `VIEWED_LABEL_TEXT` | `input[name="viewed"]` / `.js-reviewed-checkbox` / `button[aria-label="Viewed"]` / ラベル文字列 `Viewed` |
+| Viewed の ON/OFF | `VIEWED_STATE_ATTRIBUTES`, `VIEWED_FILE_ATTRIBUTE` | `input.checked` / `aria-checked` / `aria-pressed` / `data-file-user-viewed` |
+| ファイルツリーのルート | `TREE_CONTAINER_SELECTORS` | `[data-testid="file-tree"]` / `#repos-file-tree` / `[aria-label="File Tree"]` / `[role="tree"]` |
 | ツリー項目 | `TREE_ITEM_SELECTORS`, `TREE_ENTRY_TYPE_ATTRIBUTE` | `[role="treeitem"]` / `data-tree-entry-type` |
-| ツリー項目のパス | `TREE_ITEM_PATH_ATTRIBUTES`, `TREE_ITEM_LABEL_SELECTORS` | `data-file-path` / 表示ラベル＋祖先ディレクトリ名 |
+| ツリー項目のパス | `TREE_ITEM_PATH_ATTRIBUTES`, `TREE_ITEM_LABEL_SELECTORS` | `data-file-path` / **treeitem の `id`（新 UI では完全パス）** / 表示ラベル＋祖先ディレクトリ名 |
 | diff アンカー | `TREE_ITEM_DIFF_LINK_SELECTOR`, `DIFF_ANCHOR_ID_PREFIX` | `a[href*="#diff-"]` / `id="diff-…"` |
-| 対象 URL | `PR_FILES_PATHNAME_PATTERN` | `/{owner}/{repo}/pull/{number}/files` |
+| 対象 URL | `PR_FILES_PATHNAME_PATTERN` | `/{owner}/{repo}/pull/{number}/(files\|changes)` |
 
 各定数は**候補の配列**で、前から順に試して最初にヒットしたものだけを採用します（新旧 UI の両方をカバーするため）。
 
+### 2 系統の収集方式
+
+新レビュー UI では「ファイルコンテナに完全パスがある」という前提が成り立たないため、次の 2 方式を併用し結果をマージしています。
+
+1. **コンテナ起点**（従来 UI）: `DIFF_FILE_SELECTORS` でファイル要素を列挙し、中の Viewed トグルを読む
+2. **トグル起点**（新 UI）: Viewed トグルを列挙し、そこから祖先を遡って「隣のファイルのトグルを含まない範囲」でパスを探す
+   - パスの探索順: 子孫の `data-file-path` 等 → `title`（`/` を含むものだけ）→ `aria-label` の `… : <path>` 形式
+   - どれも取れない場合は `#diff-<hash>` アンカー ID をキーにしてツリーと対応付ける（疑似キー `#diff-…`）
+   - 解決結果は `WeakMap` にキャッシュし、同期ごとの再探索を避ける
+
 ## GitHub の DOM 変更時に確認する箇所
 
-動かなくなったら、DevTools でコンソールのデバッグログを有効化し（前述）、次の順に切り分けます。
+デバッグログを有効化すると、起動 1.5 秒後に**診断レポート**がコンソールへ出ます。どのセレクタが 0 件か、Viewed トグルの実体・属性・祖先、ツリー項目の構造が 1 回でまとめて確認できます。まずこれを見てください。
+
+さらに次の順で切り分けます。
 
 1. **コンテナが取れているか**
    - `document.querySelector('#files')` / `document.querySelector('[data-testid="file-tree"]')` が取れるか
    - 取れない → `DIFF_CONTAINER_SELECTORS` / `TREE_CONTAINER_SELECTORS` を更新
 2. **diff の 1 ファイル要素とパスが取れているか**
    - `document.querySelectorAll('[data-tagsearch-path]').length` が 0 なら `DIFF_FILE_SELECTORS` と `DIFF_FILE_PATH_ATTRIBUTES` を更新
-3. **Viewed チェックボックスが取れているか**
-   - `document.querySelectorAll('input[name="viewed"]').length` が 0 なら `VIEWED_CONTROL_SELECTORS` を更新
-   - チェックボックスではない UI（ボタン等）に変わった場合は `viewed-state.ts` の `isViewedControlChecked` も併せて要修正
+3. **Viewed トグルが取れているか**
+   - 診断レポートの `viewed controls:` の `count` が 0 なら `VIEWED_CONTROL_SELECTORS` / `VIEWED_CONTROL_HOST_SELECTOR` を更新
+   - `state=null` になっている場合は ON/OFF の在り処が変わっている。レポートに出るトグルの属性を見て `VIEWED_STATE_ATTRIBUTES` を更新
 4. **ツリー項目とパス解決**
    - `✓` が付かない／別ファイルに付く場合はパス解決を疑う。ツリー項目には `data-gh-viewed-path` に解決結果が入るので、DevTools で実際の値を確認する
    - ズレている → `TREE_ITEM_PATH_ATTRIBUTES` / `TREE_ITEM_LABEL_SELECTORS` / `TREE_ENTRY_TYPE_ATTRIBUTE` を更新
@@ -233,7 +247,9 @@ pnpm test
 
 ## 制約
 
-- content script は `https://github.com/*` に注入されます（SPA 遷移に追従するため）。同期処理自体は Files changed 画面以外では動きません
+- content script は `https://github.com/*` に注入されます（SPA 遷移に追従するため）。権限（`permissions`）は一切要求せず、同期処理は Files changed 画面以外では動きません。注入範囲を狭めると「リポジトリ画面 → PR」のようなソフトナビゲーションで注入されず動作しなくなります
+- 新レビュー UI（`/changes`）では diff が遅延描画されるため、**まだ描画されていないファイルには ✓ が付きません**（スクロールして描画されると反映されます）。Viewed 状態の取得元が DOM のみである以上の制約です
+- デバッグフラグは github.com オリジンの `localStorage` に保存します（`chrome.storage` を使わないため権限が不要）。既定では読み取りのみで、書き込みは利用者が明示的に有効化したときだけです
 - GitHub Enterprise Server（独自ドメイン）は対象外です。使う場合は `manifest.json` の `matches` にドメインを追加してください
 - ファイルツリーが表示されていない場合（ウィンドウ幅が狭い、ツリーを閉じている等）は反映先が無いため何も起きません。ツリーを開くと同期されます
 - 表示は DOM への付与のみで、`Viewed` の状態自体は GitHub 側の管理に従います（拡張は状態を保存しません）

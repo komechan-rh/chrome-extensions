@@ -4,3 +4,11 @@ dist/
 .DS_Store
 .vite/
 coverage/
+
+# ローカル環境固有の設定（絶対パス・権限設定などが入るため公開しない）
+.claude/
+.vscode/
+.idea/
+.env
+.env.*
+*.local

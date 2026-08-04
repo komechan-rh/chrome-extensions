@@ -3,6 +3,7 @@
   "name": "GitHub PR Viewed Sync",
   "version": "1.0.0",
   "description": "Pull Request の Files changed で Viewed にしたファイルを、左サイドバーのファイルツリーにも表示します。",
+  "minimum_chrome_version": "120",
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],

@@ -68,6 +68,23 @@ export function readTreeItemLabel(item: HTMLElement): string | null {
   return readOwnVisibleText(item);
 }
 
+/**
+ * 新しいレビュー UI のツリー項目は `id` 属性にファイル／ディレクトリの完全パスが入る。
+ * ただし `_R_xxx_` のような内部 ID もあるため、パスらしいものだけを採用する。
+ */
+function readTreeItemIdPath(item: HTMLElement): FilePath | null {
+  const id = item.id;
+  if (id === '' || id.startsWith('_') || !id.includes('/')) return null;
+  return normalizeFilePath(id);
+}
+
+/** 属性・id から明示的に取得できる完全パス。 */
+function readTreeItemExplicitPath(item: HTMLElement): FilePath | null {
+  const fromAttribute = normalizeFilePath(readFirstAttribute(item, TREE_ITEM_PATH_ATTRIBUTES));
+  if (fromAttribute !== null) return fromAttribute;
+  return readTreeItemIdPath(item);
+}
+
 /** ツリー項目内の diff アンカー ID。 */
 export function readTreeItemAnchorId(item: HTMLElement): DiffAnchorId | null {
   const link = item.querySelector<HTMLAnchorElement>(TREE_ITEM_DIFF_LINK_SELECTOR);
@@ -94,8 +111,8 @@ export function isTreeFileItem(item: HTMLElement): boolean {
  * 属性 → title → 祖先ディレクトリ名の連結、の順で完全パスを組み立てる。
  */
 export function resolveTreeItemPath(item: HTMLElement): FilePath | null {
-  const ownAttributePath = normalizeFilePath(readFirstAttribute(item, TREE_ITEM_PATH_ATTRIBUTES));
-  if (ownAttributePath !== null) return ownAttributePath;
+  const ownExplicitPath = readTreeItemExplicitPath(item);
+  if (ownExplicitPath !== null) return ownExplicitPath;
 
   const link = item.querySelector<HTMLAnchorElement>('a');
   if (link !== null && link.closest<HTMLElement>(TREE_ITEM_SELECTOR_LIST) === item) {
@@ -109,9 +126,9 @@ export function resolveTreeItemPath(item: HTMLElement): FilePath | null {
   const ancestorLabels: string[] = [];
   let current = item.parentElement?.closest<HTMLElement>(TREE_ITEM_SELECTOR_LIST) ?? null;
   while (current !== null) {
-    const attributePath = normalizeFilePath(readFirstAttribute(current, TREE_ITEM_PATH_ATTRIBUTES));
-    if (attributePath !== null) {
-      ancestorLabels.unshift(attributePath);
+    const explicitPath = readTreeItemExplicitPath(current);
+    if (explicitPath !== null) {
+      ancestorLabels.unshift(explicitPath);
       break;
     }
 

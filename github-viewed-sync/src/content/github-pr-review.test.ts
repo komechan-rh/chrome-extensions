@@ -150,6 +150,30 @@ describe('createPrReviewSync', () => {
     expect(document.querySelectorAll(`[${VIEWED_BADGE_ATTRIBUTE}]`)).toHaveLength(0);
   });
 
+  it('新レビュー UI（/changes 相当）でも初期同期・オン・オフが動く', async () => {
+    const files = [
+      { path: 'src/features/notes/index.tsx', viewed: true },
+      { path: 'src/features/notes/components/note-dialog.tsx', viewed: false },
+    ];
+    const fixture = createPrFilesPage({ ui: 'next', files });
+    startSync();
+
+    // 初期同期
+    expect(isMarked(fixture, 'src/features/notes/index.tsx')).toBe(true);
+    expect(isMarked(fixture, 'src/features/notes/components/note-dialog.tsx')).toBe(false);
+
+    // ボタン型トグルをオン（change ではなく click 経由）
+    fixture.toggleViewed('src/features/notes/components/note-dialog.tsx', true);
+    await wait(50);
+    expect(isMarked(fixture, 'src/features/notes/components/note-dialog.tsx')).toBe(true);
+
+    // オフに戻す
+    fixture.toggleViewed('src/features/notes/components/note-dialog.tsx', false);
+    await wait(50);
+    expect(isMarked(fixture, 'src/features/notes/components/note-dialog.tsx')).toBe(false);
+    expect(isMarked(fixture, 'src/features/notes/index.tsx')).toBe(true);
+  });
+
   it('start を重ねて呼んでも二重に動作しない', () => {
     const fixture = createPrFilesPage({ files: [{ path: 'src/a.ts', viewed: true }] });
     const controller = startSync();

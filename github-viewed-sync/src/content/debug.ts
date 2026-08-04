@@ -14,7 +14,10 @@ export const DEBUG_STORAGE_KEY = 'github-viewed-sync:debug';
 
 const LOG_PREFIX = '[github-viewed-sync]';
 
-/** localStorage へのアクセス可否はブラウザ設定に依存するため、例外を握り潰す。 */
+/**
+ * localStorage へのアクセス可否はブラウザ設定に依存するため、例外を握り潰す。
+ * ここで失敗しても「デバッグログが出ない」だけで、拡張の動作には影響しない。
+ */
 function readStoredFlag(): boolean {
   try {
     return window.localStorage.getItem(DEBUG_STORAGE_KEY) === '1';
@@ -25,18 +28,6 @@ function readStoredFlag(): boolean {
 
 export function isDebugEnabled(): boolean {
   return DEBUG || readStoredFlag();
-}
-
-export function setDebugEnabled(enabled: boolean): void {
-  try {
-    if (enabled) {
-      window.localStorage.setItem(DEBUG_STORAGE_KEY, '1');
-    } else {
-      window.localStorage.removeItem(DEBUG_STORAGE_KEY);
-    }
-  } catch {
-    // ストレージが使えない環境では何もしない。
-  }
 }
 
 export function debugLog(...args: unknown[]): void {

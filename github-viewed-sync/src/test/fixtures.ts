@@ -12,12 +12,20 @@ export interface FixtureFile {
   viewed?: boolean;
 }
 
+/**
+ * 再現する UI の世代。
+ * - `legacy`: `/pull/{n}/files`。`data-tagsearch-path` + `input.js-reviewed-checkbox`
+ * - `next`: `/pull/{n}/changes`。`data-file-path` + `button[aria-pressed]`、ツリー項目の id が完全パス
+ */
+export type FixtureUi = 'legacy' | 'next';
+
 export interface FixtureOptions {
   files?: readonly FixtureFile[];
   /** ファイルツリーを最初から描画するか（false なら後から appendTree で追加できる）。 */
   includeTree?: boolean;
   /** ツリー項目に data-file-path を持たせるか（新しい UI 相当）。 */
   treePathAttribute?: boolean;
+  ui?: FixtureUi;
 }
 
 export interface Fixture {
@@ -28,7 +36,7 @@ export interface Fixture {
   /** 後から diff ファイルを追加する（追加読み込みの再現）。 */
   appendDiffFile(file: FixtureFile): HTMLElement;
   getDiffFile(path: string): HTMLElement;
-  getViewedControl(path: string): HTMLInputElement;
+  getViewedControl(path: string): HTMLElement;
   getTreeItem(path: string): HTMLElement;
   queryTreeItem(path: string): HTMLElement | null;
   /** Viewed チェックボックスをユーザー操作相当で切り替える。 */
@@ -39,7 +47,54 @@ export function anchorIdFor(path: string): string {
   return `diff-${path.replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 
-function createDiffFile(doc: Document, file: FixtureFile): HTMLElement {
+/** 新 UI の Viewed トグル（`button[aria-label="Viewed"]` + aria-pressed）。 */
+function createViewedButton(doc: Document, viewed: boolean): HTMLElement {
+  const button = doc.createElement('button');
+  button.type = 'button';
+  button.setAttribute('aria-label', 'Viewed');
+  button.setAttribute('aria-pressed', String(viewed));
+  const icon = doc.createElement('svg');
+  icon.setAttribute('aria-hidden', 'true');
+  button.appendChild(icon);
+  const text = doc.createElement('span');
+  text.textContent = 'Viewed';
+  button.appendChild(text);
+  return button;
+}
+
+/**
+ * 新しいレビュー UI（/changes）のファイル要素。
+ * 実 DOM に合わせて、**コンテナ自身はパス属性を持たず**、
+ * 完全パスは中の「Expand all lines」ボタンの data-file-path に入っている。
+ */
+function createNextDiffFile(doc: Document, file: FixtureFile): HTMLElement {
+  const container = doc.createElement('div');
+  container.id = anchorIdFor(file.path);
+
+  const header = doc.createElement('div');
+
+  const name = doc.createElement('span');
+  // ヘッダーの表示は省略形（完全パスは取れない）。
+  name.textContent = `…${file.path.slice(-30)}`;
+  header.appendChild(name);
+
+  const expandButton = doc.createElement('button');
+  expandButton.type = 'button';
+  expandButton.setAttribute('data-component', 'IconButton');
+  expandButton.setAttribute('aria-label', `Expand all lines: ${file.path}`);
+  expandButton.setAttribute('data-file-path', file.path);
+  header.appendChild(expandButton);
+
+  header.appendChild(createViewedButton(doc, file.viewed ?? false));
+  container.appendChild(header);
+
+  const body = doc.createElement('div');
+  container.appendChild(body);
+
+  return container;
+}
+
+function createLegacyDiffFile(doc: Document, file: FixtureFile): HTMLElement {
   const viewed = file.viewed ?? false;
   const container = doc.createElement('div');
   container.className = 'file js-file js-details-container';
@@ -83,8 +138,13 @@ function createDiffFile(doc: Document, file: FixtureFile): HTMLElement {
   return container;
 }
 
+function createDiffFile(doc: Document, file: FixtureFile, ui: FixtureUi): HTMLElement {
+  return ui === 'next' ? createNextDiffFile(doc, file) : createLegacyDiffFile(doc, file);
+}
+
 interface TreeBuildOptions {
   pathAttribute: boolean;
+  ui: FixtureUi;
 }
 
 function createTreeItemLabel(doc: Document, text: string): HTMLElement {
@@ -114,8 +174,13 @@ function appendTreeFiles(
 
     const item = doc.createElement('li');
     item.setAttribute('role', 'treeitem');
-    item.setAttribute('data-tree-entry-type', 'directory');
     item.setAttribute('aria-expanded', 'true');
+    if (options.ui === 'next') {
+      // 新 UI は id に完全パスが入り、data-tree-entry-type は無い。
+      item.id = dirPath;
+    } else {
+      item.setAttribute('data-tree-entry-type', 'directory');
+    }
     item.appendChild(createTreeItemLabel(doc, name));
 
     const group = doc.createElement('ul');
@@ -135,8 +200,12 @@ function appendTreeFiles(
 
     const item = doc.createElement('li');
     item.setAttribute('role', 'treeitem');
-    item.setAttribute('data-tree-entry-type', 'file');
     item.setAttribute(TEST_PATH_ATTRIBUTE, file.path);
+    if (options.ui === 'next') {
+      item.id = file.path;
+    } else {
+      item.setAttribute('data-tree-entry-type', 'file');
+    }
     if (options.pathAttribute) item.setAttribute('data-file-path', file.path);
 
     const link = doc.createElement('a');
@@ -156,6 +225,7 @@ export function createPrFilesPage(options: FixtureOptions = {}): Fixture {
   const files = options.files ?? [];
   const includeTree = options.includeTree ?? true;
   const pathAttribute = options.treePathAttribute ?? false;
+  const ui = options.ui ?? 'legacy';
 
   const page = doc.createElement('div');
   page.id = 'js-repo-pjax-container';
@@ -176,7 +246,7 @@ export function createPrFilesPage(options: FixtureOptions = {}): Fixture {
   doc.body.appendChild(page);
 
   for (const file of files) {
-    diffContainer.appendChild(createDiffFile(doc, file));
+    diffContainer.appendChild(createDiffFile(doc, file, ui));
   }
 
   const buildTree = (treeFiles: readonly FixtureFile[]): HTMLElement => {
@@ -192,7 +262,7 @@ export function createPrFilesPage(options: FixtureOptions = {}): Fixture {
     list.setAttribute('aria-label', 'File Tree');
     container.appendChild(list);
 
-    appendTreeFiles(doc, list, treeFiles, { pathAttribute });
+    appendTreeFiles(doc, list, treeFiles, { pathAttribute, ui });
     sidebar.appendChild(container);
     return container;
   };
@@ -208,24 +278,26 @@ export function createPrFilesPage(options: FixtureOptions = {}): Fixture {
     },
 
     appendDiffFile(file) {
-      const element = createDiffFile(doc, file);
+      const element = createDiffFile(doc, file, ui);
       diffContainer.appendChild(element);
       return element;
     },
 
     getDiffFile(path) {
-      const element = diffContainer.querySelector<HTMLElement>(
-        `[data-tagsearch-path="${CSS.escape(path)}"]`,
-      );
+      const selector =
+        ui === 'next'
+          ? `#${CSS.escape(anchorIdFor(path))}`
+          : `[data-tagsearch-path="${CSS.escape(path)}"]`;
+      const element = diffContainer.querySelector<HTMLElement>(selector);
       if (element === null) throw new Error(`diff file not found: ${path}`);
       return element;
     },
 
     getViewedControl(path) {
-      const control = fixture
-        .getDiffFile(path)
-        .querySelector<HTMLInputElement>('input.js-reviewed-checkbox');
-      if (control === null) throw new Error(`viewed checkbox not found: ${path}`);
+      const selector =
+        ui === 'next' ? 'button[aria-label="Viewed"]' : 'input.js-reviewed-checkbox';
+      const control = fixture.getDiffFile(path).querySelector<HTMLElement>(selector);
+      if (control === null) throw new Error(`viewed control not found: ${path}`);
       return control;
     },
 
@@ -243,7 +315,15 @@ export function createPrFilesPage(options: FixtureOptions = {}): Fixture {
 
     toggleViewed(path, viewed) {
       const control = fixture.getViewedControl(path);
-      control.checked = viewed;
+
+      if (ui === 'next') {
+        // ボタン型トグル: クリックで GitHub が aria-pressed を更新する挙動を再現する。
+        control.setAttribute('aria-pressed', String(viewed));
+        control.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return;
+      }
+
+      (control as HTMLInputElement).checked = viewed;
       control.dispatchEvent(new Event('change', { bubbles: true }));
     },
   };

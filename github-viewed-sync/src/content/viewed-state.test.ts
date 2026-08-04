@@ -6,6 +6,7 @@ import {
   buildViewedStateMap,
   collectViewedPaths,
   diffViewedStates,
+  isViewedControl,
   readDiffFileEntries,
   readDiffFilePath,
 } from './viewed-state';
@@ -62,7 +63,7 @@ describe('diff 側の Viewed 状態の収集', () => {
       files: [{ path: 'src/a.ts', viewed: true }],
     });
 
-    const control = fixture.getViewedControl('src/a.ts');
+    const control = fixture.getViewedControl('src/a.ts') as HTMLInputElement;
     // GitHub の初期 HTML では checked 属性が残るため、属性ではなくプロパティを見る必要がある。
     control.checked = false;
 
@@ -127,6 +128,159 @@ describe('diff 側の Viewed 状態の収集', () => {
     control!.checked = true;
 
     expect(collectViewedPaths(findDiffContainer(document)).has('src/a.ts')).toBe(true);
+  });
+});
+
+describe('新しいレビュー UI（/changes）', () => {
+  it('data-file-path とボタン型トグル（aria-pressed）から Viewed を取得できる', () => {
+    createPrFilesPage({
+      ui: 'next',
+      files: [
+        { path: 'src/features/notes/index.tsx', viewed: true },
+        { path: 'src/features/notes/components/note-dialog.tsx', viewed: false },
+      ],
+    });
+
+    const state = buildViewedStateMap(findDiffContainer(document));
+
+    expect(state.get('src/features/notes/index.tsx')).toBe(true);
+    expect(state.get('src/features/notes/components/note-dialog.tsx')).toBe(false);
+  });
+
+  it('完全パスが「Expand all lines」ボタン側にあってもトグル起点で解決できる', () => {
+    // 実 DOM 準拠: ファイルコンテナ自身はパスを持たず、中のボタンが data-file-path を持つ。
+    document.body.innerHTML = `
+      <main>
+        <div id="diff-1">
+          <div>
+            <button data-component="IconButton" aria-label="Expand all lines: src/components/index.ts"
+                    data-file-path="src/components/index.ts"></button>
+            <button aria-label="Viewed" aria-pressed="true"><svg></svg><span>Viewed</span></button>
+          </div>
+        </div>
+        <div id="diff-2">
+          <div>
+            <button data-component="IconButton" aria-label="Expand all lines: src/pages/index.ts"
+                    data-file-path="src/pages/index.ts"></button>
+            <button aria-label="Viewed" aria-pressed="false"><svg></svg><span>Viewed</span></button>
+          </div>
+        </div>
+      </main>`;
+
+    const state = buildViewedStateMap(findDiffContainer(document));
+
+    expect(state.get('src/components/index.ts')).toBe(true);
+    expect(state.get('src/pages/index.ts')).toBe(false);
+    expect(state.size).toBe(2);
+  });
+
+  it('隣のファイルのパスを取り違えない（同名ファイル・トグル起点）', () => {
+    document.body.innerHTML = `
+      <main>
+        <div>
+          <button data-file-path="a/index.ts" aria-label="Expand all lines: a/index.ts"></button>
+          <button aria-label="Viewed" aria-pressed="true"></button>
+        </div>
+        <div>
+          <button data-file-path="b/index.ts" aria-label="Expand all lines: b/index.ts"></button>
+          <button aria-label="Viewed" aria-pressed="false"></button>
+        </div>
+      </main>`;
+
+    const viewed = collectViewedPaths(findDiffContainer(document));
+
+    expect([...viewed]).toEqual(['a/index.ts']);
+  });
+
+  it('Expand all lines ボタンが無いファイルでも title からパスを解決する', () => {
+    // 折りたたみ行が無いファイルには「Expand all lines」ボタンが存在しない。
+    document.body.innerHTML = `
+      <main>
+        <div id="diff-1">
+          <div>
+            <span title="src/features/notes/components/note-dialog.tsx">…components/note-dialog.tsx</span>
+            <button aria-label="Viewed" aria-pressed="true"></button>
+          </div>
+        </div>
+      </main>`;
+
+    const viewed = collectViewedPaths(findDiffContainer(document));
+
+    expect([...viewed]).toEqual(['src/features/notes/components/note-dialog.tsx']);
+  });
+
+  it('パスが全く取れない場合は #diff- アンカーで対応付ける', () => {
+    document.body.innerHTML = `
+      <main>
+        <div id="diff-abc123">
+          <div>
+            <span>…dialog.tsx</span>
+            <button aria-label="Viewed" aria-pressed="true"></button>
+          </div>
+        </div>
+      </main>`;
+
+    const entries = readDiffFileEntries(findDiffContainer(document));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.anchorId).toBe('diff-abc123');
+    expect(entries[0]?.viewed).toBe(true);
+    // 疑似キーなので、実パスと衝突しない形式になっている。
+    expect(entries[0]?.path).toBe('#diff-abc123');
+  });
+
+  it('ファイル名だけの title は完全パスとして採用しない', () => {
+    document.body.innerHTML = `
+      <main>
+        <div id="diff-1">
+          <div>
+            <span title="dialog.tsx">dialog.tsx</span>
+            <button aria-label="Viewed" aria-pressed="true"></button>
+          </div>
+        </div>
+      </main>`;
+
+    const entries = readDiffFileEntries(findDiffContainer(document));
+
+    // 誤ったパスで別ファイルを汚さないよう、アンカー側へフォールバックする。
+    expect(entries[0]?.path).toBe('#diff-1');
+  });
+
+  it('role="checkbox" の aria-checked でも判定できる', () => {
+    document.body.innerHTML = `
+      <div id="files">
+        <div data-file-path="src/a.ts">
+          <div role="checkbox" aria-checked="true" aria-label="Viewed"></div>
+        </div>
+      </div>`;
+
+    expect(collectViewedPaths(findDiffContainer(document)).has('src/a.ts')).toBe(true);
+  });
+
+  it('コンテナ側の data-file-user-viewed でも判定できる', () => {
+    document.body.innerHTML = `
+      <div id="files">
+        <div data-file-path="src/a.ts" data-file-user-viewed="true"></div>
+        <div data-file-path="src/b.ts" data-file-user-viewed="false"></div>
+      </div>`;
+
+    const state = buildViewedStateMap(findDiffContainer(document));
+
+    expect(state.get('src/a.ts')).toBe(true);
+    expect(state.get('src/b.ts')).toBe(false);
+  });
+
+  it('ボタン内部の要素をクリック対象としても Viewed トグルと判定できる', () => {
+    const fixture = createPrFilesPage({
+      ui: 'next',
+      files: [{ path: 'src/a.ts' }],
+    });
+    const control = fixture.getViewedControl('src/a.ts');
+    const innerIcon = control.querySelector('svg');
+
+    expect(isViewedControl(control)).toBe(true);
+    expect(isViewedControl(innerIcon)).toBe(true);
+    expect(isViewedControl(document.body)).toBe(false);
   });
 });
 

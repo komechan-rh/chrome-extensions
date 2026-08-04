@@ -45,19 +45,68 @@ export const DIFF_FILE_PATH_TEXT_SELECTORS = [
   'a[title][href*="/blob/"]',
 ] as const;
 
-/** Viewed チェックボックス候補。 */
+/**
+ * ファイル要素の子孫からパスを読むための「セレクタ + 属性」の組。
+ * 新しいレビュー UI では完全パスがコンテナではなく子孫の要素に入っている。
+ * 「Expand all lines」ボタンは折りたたみ行が無いファイルには存在しないため、
+ * パスのコピー用要素なども候補に含める。
+ */
+export const DIFF_FILE_PATH_DEEP_SOURCES = [
+  { selector: '[data-file-path]', attribute: 'data-file-path', loose: false },
+  { selector: '[data-tagsearch-path]', attribute: 'data-tagsearch-path', loose: false },
+  { selector: '[data-path]', attribute: 'data-path', loose: false },
+  { selector: '[data-clipboard-text]', attribute: 'data-clipboard-text', loose: false },
+  { selector: 'clipboard-copy[value]', attribute: 'value', loose: false },
+  { selector: 'a[title][href*="/blob/"]', attribute: 'title', loose: false },
+  // loose: 汎用属性からの推定。ディレクトリ区切りを含むものだけ採用する。
+  { selector: '[title]', attribute: 'title', loose: true },
+] as const;
+
+/**
+ * `aria-label="Expand all lines: <path>"` のように、ラベル末尾へパスが入るパターン。
+ * ラベル文字列は変わりやすいので、あくまで最後のフォールバックとして使う。
+ */
+export const DIFF_FILE_PATH_LABEL_PATTERN = /^[^:：]{1,40}[:：]\s*(\S.*)$/;
+
+/**
+ * Viewed トグル候補。
+ * 従来 UI はチェックボックスだが、新しいレビュー UI はボタン（`aria-pressed`）等の
+ * 可能性があるため、input に限定しない。
+ */
 export const VIEWED_CONTROL_SELECTORS = [
   'input[type="checkbox"].js-reviewed-checkbox',
   'input[type="checkbox"][name="viewed"]',
-  'input[type="checkbox"][data-testid="viewed-checkbox"]',
+  '[data-testid="viewed-checkbox"]',
+  '[data-testid="file-viewed-checkbox"]',
   'input[type="checkbox"][aria-label="Viewed"]',
+  '[role="checkbox"][aria-label="Viewed"]',
+  '[role="switch"][aria-label="Viewed"]',
+  'button[aria-label="Viewed"]',
   'input[type="checkbox"][data-viewed]',
 ] as const;
 
-/** 上記で見つからない場合に、ラベル文字列から Viewed チェックボックスを判定するための語。 */
+/**
+ * 上記で見つからない場合に「ラベル文字列が Viewed のトグル」を探す対象。
+ * チェックボックス・スイッチ・ボタン・label のいずれかを想定する。
+ */
+export const VIEWED_CONTROL_HOST_SELECTOR =
+  'input[type="checkbox"], [role="checkbox"], [role="switch"], button, label';
+
+/** ラベル文字列から Viewed トグルを判定するための語。 */
 export const VIEWED_LABEL_TEXT = 'viewed';
 
-/** チェックボックスが無い UI 向けのフォールバック属性（diff コンテナ側に付く）。 */
+/** ラベル文字列で判定する際、これより長いテキストを持つ要素は「囲みの親」とみなして除外する。 */
+export const VIEWED_LABEL_MAX_LENGTH = 40;
+
+/** トグルの ON / OFF 状態を保持しうる属性（前から順に見る）。 */
+export const VIEWED_STATE_ATTRIBUTES = [
+  'aria-checked',
+  'aria-pressed',
+  'data-viewed',
+  'data-file-user-viewed',
+] as const;
+
+/** トグルが見つからない場合のフォールバック属性（diff コンテナ側に付く）。 */
 export const VIEWED_FILE_ATTRIBUTE = 'data-file-user-viewed';
 
 /** ファイルツリーのルート候補。 */
@@ -101,8 +150,11 @@ export const TREE_ITEM_DIFF_LINK_SELECTOR = 'a[href*="#diff-"]';
 /** diff アンカー ID の接頭辞。 */
 export const DIFF_ANCHOR_ID_PREFIX = 'diff-';
 
-/** Files changed 画面の URL パターン（`/{owner}/{repo}/pull/{number}/files`）。 */
-export const PR_FILES_PATHNAME_PATTERN = /^\/[^/]+\/[^/]+\/pull\/\d+\/files(?:\/|$)/;
+/**
+ * Files changed 画面の URL パターン。
+ * 従来の `/pull/{number}/files` と、新しいレビュー UI の `/pull/{number}/changes` の両方に対応する。
+ */
+export const PR_FILES_PATHNAME_PATTERN = /^\/[^/]+\/[^/]+\/pull\/\d+\/(?:files|changes)(?:\/|$)/;
 
 /**
  * セレクタ候補を順に試し、最初にヒットした 1 件を返す。

@@ -55,6 +55,43 @@ describe('ファイルツリーのパス解決', () => {
     );
   });
 
+  it('新 UI は treeitem の id（完全パス）から解決する', () => {
+    const fixture = createPrFilesPage({
+      ui: 'next',
+      files: [
+        { path: 'src/features/notes/components/note-dialog.tsx' },
+        { path: 'src/features/notes/index.tsx' },
+      ],
+    });
+
+    expect(
+      resolveTreeItemPath(fixture.getTreeItem('src/features/notes/components/note-dialog.tsx')),
+    ).toBe('src/features/notes/components/note-dialog.tsx');
+    expect(resolveTreeItemPath(fixture.getTreeItem('src/features/notes/index.tsx'))).toBe(
+      'src/features/notes/index.tsx',
+    );
+  });
+
+  it('id が内部 ID（_R_xxx_）の場合はラベルから解決する', () => {
+    document.body.innerHTML = `
+      <div id="repos-file-tree">
+        <ul role="tree">
+          <li role="treeitem" id="_R_abc_" aria-expanded="true">
+            <span class="PRIVATE_TreeView-item-content-text">src</span>
+            <ul role="group">
+              <li role="treeitem" id="_R_def_">
+                <span class="PRIVATE_TreeView-item-content-text">a.ts</span>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>`;
+
+    const entries = readTreeFileEntries(document.querySelector('#repos-file-tree'));
+
+    expect(entries.map((entry) => entry.path)).toEqual(['src/a.ts']);
+  });
+
   it('data-tree-entry-type が無い旧 UI でもファイル項目を判別できる', () => {
     document.body.innerHTML = `
       <div id="repos-file-tree">
