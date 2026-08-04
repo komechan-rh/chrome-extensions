@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub PR Viewed Sync",
+  "version": "1.0.0",
+  "description": "Pull Request の Files changed で Viewed にしたファイルを、左サイドバーのファイルツリーにも表示します。",
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

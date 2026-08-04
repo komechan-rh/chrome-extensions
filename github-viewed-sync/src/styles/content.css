@@ -1,0 +1,46 @@
+/*
+ * レビュー済み表示のスタイル。
+ * 色は GitHub の CSS 変数（Primer）を使い、ライト／ダークの両テーマへ自動追従させる。
+ * 変数が無い環境向けにフォールバック値のみ固定色を指定する。
+ */
+
+.gh-viewed-tree-item {
+  opacity: 0.62;
+  transition: opacity 80ms ease-in-out;
+}
+
+/* 薄くしたままだと読みにくいため、ホバー・フォーカス時は元の濃さに戻す。 */
+.gh-viewed-tree-item:hover,
+.gh-viewed-tree-item:focus-within {
+  opacity: 1;
+}
+
+.gh-viewed-tree-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+  user-select: none;
+}
+
+/* ハイコントラストモードでは半透明・独自色をやめ、OS の色に従う。 */
+@media (forced-colors: active) {
+  .gh-viewed-tree-item {
+    opacity: 1;
+  }
+
+  .gh-viewed-tree-badge {
+    color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-viewed-tree-item {
+    transition: none;
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "github-viewed-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GitHub の Pull Request \"Files changed\" で Viewed にしたファイルを左サイドバーのファイルツリーへ視覚的に反映する Chrome 拡張",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "jsdom": "^30.0.0",
+    "oxlint": "^1.0.0",
+    "typescript": "^7.0.0",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}
