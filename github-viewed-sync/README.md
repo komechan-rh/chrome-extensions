@@ -25,7 +25,9 @@ https://github.com/*/*/pull/*/files      # 従来 UI
 https://github.com/*/*/pull/*/changes    # 新レビュー UI
 ```
 
-content script 自体は `https://github.com/*` に注入されます。これは GitHub が SPA（Turbo）遷移するため、Conversation タブから Files changed タブへ移動しただけでは Chrome が content script を再注入しないためです。注入後、URL が上記パターンに一致するときだけ同期を開始し、離れると監視を解除して付与した表示も取り除きます。
+content script 自体は `https://github.com/*/*/pull/*`（PR 画面全体）に注入されます。これは GitHub が SPA（Turbo）遷移するため、Conversation タブから Files changed タブへ移動しただけでは Chrome が content script を再注入しないためです。注入後、URL が上記パターンに一致するときだけ同期を開始し、離れると監視を解除して付与した表示も取り除きます。
+
+なお、PR 一覧・Issue・リポジトリのコード画面など**注入範囲外のページ**から SPA 遷移で PR 画面に入った場合は、その回だけ content script が注入されず同期が始まりません（Chrome は matches に一致する URL への遷移でも、遷移元に content script が無ければ再注入しない）。ページを再読み込みするか、PR の URL を直接開くと注入されます。
 
 ## 技術構成
 
@@ -247,10 +249,10 @@ pnpm test
 
 ## 制約
 
-- content script は `https://github.com/*` に注入されます（SPA 遷移に追従するため）。権限（`permissions`）は一切要求せず、同期処理は Files changed 画面以外では動きません。注入範囲を狭めると「リポジトリ画面 → PR」のようなソフトナビゲーションで注入されず動作しなくなります
+- content script は `https://github.com/*/*/pull/*`（PR 画面全体）に注入されます（SPA 遷移に追従するため）。権限（`permissions`）は一切要求せず、同期処理は Files changed 画面以外では動きません。PR 一覧・Issue・リポジトリのコード画面など注入範囲外のページから SPA 遷移で PR に入った場合はその回だけ注入されず動作しません（再読み込みまたは URL 直接アクセスで復帰）。Conversation タブ⇔Files changed タブの切り替えは PR 画面内の遷移のため影響を受けません
 - 新レビュー UI（`/changes`）では diff が遅延描画されるため、**まだ描画されていないファイルには ✓ が付きません**（スクロールして描画されると反映されます）。Viewed 状態の取得元が DOM のみである以上の制約です
 - デバッグフラグは github.com オリジンの `localStorage` に保存します（`chrome.storage` を使わないため権限が不要）。既定では読み取りのみで、書き込みは利用者が明示的に有効化したときだけです
-- GitHub Enterprise Server（独自ドメイン）は対象外です。使う場合は `manifest.json` の `matches` にドメインを追加してください
+- GitHub Enterprise Server（独自ドメイン）は対象外です。使う場合は `manifest.json` の `matches` に `https://<独自ドメイン>/*/*/pull/*` の形式で追加してください
 - ファイルツリーが表示されていない場合（ウィンドウ幅が狭い、ツリーを閉じている等）は反映先が無いため何も起きません。ツリーを開くと同期されます
 - 表示は DOM への付与のみで、`Viewed` の状態自体は GitHub 側の管理に従います（拡張は状態を保存しません）
 - ツリー項目のパスは、`data-*` 属性が無い UI では「表示ラベル＋祖先ディレクトリ名」から組み立てます。ラベルが省略表示（中略）される UI になった場合は誤対応の可能性があるため、`data-gh-viewed-path` で解決結果を確認してください
